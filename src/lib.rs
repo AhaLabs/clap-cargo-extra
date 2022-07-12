@@ -8,7 +8,7 @@
 //! ```
 
 use anyhow::Result;
-use cargo_metadata::{camino::Utf8PathBuf, Dependency, DependencyKind, Metadata, Package};
+use cargo_metadata::{camino::Utf8PathBuf, DependencyKind, Metadata, Package};
 use clap_cargo::{Features, Manifest, Workspace};
 use std::{
     env,
@@ -16,6 +16,7 @@ use std::{
     process::Command,
 };
 
+/// Combination of all three clap cargo's arg structs
 #[derive(Default, Clone, Debug, PartialEq, Eq, clap::Args)]
 #[non_exhaustive]
 pub struct ClapCargo {
@@ -30,10 +31,11 @@ pub struct ClapCargo {
 }
 
 impl ClapCargo {
+
+    /// Current metadata for the CLI's context
     pub fn metadata(&self) -> Result<&Metadata> {
         unsafe {
             static mut METADATA: Option<Metadata> = None;
-
             if METADATA.is_none() {
                 let mut metadata_cmd = self.manifest.metadata();
                 self.features.forward_metadata(&mut metadata_cmd);
@@ -44,6 +46,7 @@ impl ClapCargo {
         }
     }
 
+    /// Current manifest path in context
     pub fn manifest_path(&self) -> Result<PathBuf> {
         let manifest_path = self
             .manifest
@@ -57,15 +60,18 @@ impl ClapCargo {
         })
     }
 
+    /// Directory where build artifacts will go
     pub fn target_dir(&self) -> Result<PathBuf> {
         Ok(self.metadata()?.target_directory.clone().into())
     }
 
+    /// Get the current packages that are selected by CLI
     pub fn packages(&self) -> Result<Vec<&Package>> {
         let meta = self.metadata()?;
         Ok(self.workspace.partition_packages(meta).0)
     }
 
+    /// Add the correct CLI flags to a command
     pub fn add_cargo_args(&self, cmd: &mut Command) {
         if let Some(manifest_path) = &self.manifest.manifest_path {
             cmd.arg("--manifest-path");
@@ -97,20 +103,22 @@ impl ClapCargo {
     }
 
     pub fn get_deps(&self, p: &Package) -> Result<Vec<Utf8PathBuf>> {
-        Ok(p.dependencies
+        let packages = &self.metadata().unwrap().packages;
+        let res = p
+            .dependencies
             .iter()
-            .filter(|dep| matches!(dep.kind, DependencyKind::Normal))
-            .map(|dep| {
-                self.metadata()
-                    .unwrap()
-                    .clone()
-                    .packages
-                    .into_iter()
-                    .find(|p| p.name == dep.name)
-                    .expect(&format!("could find {}", dep.name))
-                    .manifest_path
+            .filter_map(|dep| {
+                matches!(dep.kind, DependencyKind::Normal).then(|| {
+                    packages
+                        .iter()
+                        .find(|p| p.name == dep.name)
+                        .unwrap_or_else(|| panic!("could not find {}", dep.name))
+                        .manifest_path
+                        .clone()
+                })
             })
-            .collect())
+            .collect();
+        Ok(res)
     }
 
     pub fn cargo_cmd() -> Command {
@@ -120,36 +128,4 @@ impl ClapCargo {
 
 fn cargo() -> String {
     env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
-}
-
-#[derive(Debug)]
-pub enum DepKind {
-    Path(Utf8PathBuf),
-    Source(String),
-    Registry(String),
-}
-
-pub struct Dep {
-    pub name: String,
-    kind: DepKind,
-}
-
-impl Dep {
-    pub fn new(dep: &Dependency) -> Self {
-        println!("{:?}, {:?}, {:?}", dep.path, dep.source, dep.registry);
-        let kind = if let Some(path) = dep.path.as_ref() {
-            DepKind::Path(path.clone())
-        } else if let Some(source) = dep.source.as_ref() {
-            DepKind::Source(source.clone())
-        } else {
-            DepKind::Registry(dep.registry.as_ref().unwrap().clone())
-        };
-        let name = dep.name.clone();
-        Self { kind, name }
-    }
-
-    pub fn resolve(&self) -> Result<String> {
-        println!("{:?}", self.kind);
-        Ok(String::new())
-    }
 }
