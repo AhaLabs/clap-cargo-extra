@@ -1,0 +1,17 @@
+[package]
+authors = ["Willem Wyndham <willem@ahalabs.dev>"]
+description = "Tool to extend clap cargo adding some useful functions"
+edition = "2021"
+keywords = ["clap", "cargo", "cli"]
+license = "MIT"
+name = "clap-cargo-extra"
+repository = "https://github.com/ahalabs/clap-cargo-extra"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.58"
+cargo_metadata = "0.15.0"
+clap = {version = "3.2.10", features = ["derive", "cargo"]}
+clap-cargo = {version = "0.9.1", features = ['cargo_metadata']}
