@@ -7,9 +7,10 @@
 //! }
 //! ```
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use cargo_metadata::{camino::Utf8PathBuf, DependencyKind, Metadata, Package};
 use clap_cargo::{Features, Manifest, Workspace};
+use heck::ToShoutyKebabCase;
 use std::{
     env,
     path::{Path, PathBuf},
@@ -31,7 +32,6 @@ pub struct ClapCargo {
 }
 
 impl ClapCargo {
-
     /// Current metadata for the CLI's context
     pub fn metadata(&self) -> Result<&Metadata> {
         unsafe {
@@ -66,9 +66,14 @@ impl ClapCargo {
     }
 
     /// Get the current packages that are selected by CLI
-    pub fn packages(&self) -> Result<Vec<&Package>> {
+    pub fn current_packages(&self) -> Result<Vec<&Package>> {
         let meta = self.metadata()?;
         Ok(self.workspace.partition_packages(meta).0)
+    }
+
+    /// All packages referenced
+    pub fn packages(&self) -> Result<Vec<&Package>> {
+        Ok(self.metadata()?.packages.iter().collect::<Vec<&Package>>())
     }
 
     /// Add the correct CLI flags to a command
@@ -103,7 +108,7 @@ impl ClapCargo {
     }
 
     pub fn get_deps(&self, p: &Package) -> Result<Vec<Utf8PathBuf>> {
-        let packages = &self.metadata().unwrap().packages;
+        let packages = &self.metadata()?.packages;
         let res = p
             .dependencies
             .iter()
@@ -121,8 +126,27 @@ impl ClapCargo {
         Ok(res)
     }
 
+    /// Create a Command builder for cargo
     pub fn cargo_cmd() -> Command {
         Command::new(cargo())
+    }
+
+    /// Find package given a name
+    pub fn find_package(&self, name: &str) -> Result<Option<&Package>> {
+        let mut found_close_pair: Option<&str> = None;
+        let package = self.packages()?.into_iter().find(|p| {
+            let res = p.name == name;
+            if !res && p.name.to_shouty_kebab_case() == name.to_shouty_kebab_case() {
+              found_close_pair = Some(&p.name);
+            };
+            res
+        });
+
+        if let (Some(similar_package), None) = (found_close_pair, package) {
+          bail!("Found similar package for {name} ~ {similar_package}");
+        }
+
+        Ok(package)
     }
 }
 
