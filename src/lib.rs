@@ -7,7 +7,7 @@
 //! }
 //! ```
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use cargo_metadata::{camino::Utf8PathBuf, DependencyKind, Metadata, Package};
 use clap_cargo::{Features, Manifest, Workspace};
 use heck::ToShoutyKebabCase;
@@ -16,6 +16,9 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+
+mod cargo_bin;
+pub use cargo_bin::*;
 
 /// Combination of all three clap cargo's arg structs
 #[derive(Default, Clone, Debug, PartialEq, Eq, clap::Args)]
@@ -29,6 +32,24 @@ pub struct ClapCargo {
 
     #[clap(flatten)]
     pub workspace: Workspace,
+
+    #[clap(flatten)]
+    pub cargo_bin: CargoBin,
+
+    /// Compile release build (default is debug)
+    #[clap(long)]
+    pub release: bool,
+
+    /// Add additional nightly features for optimizing
+    #[clap(long)]
+    pub optimize: bool,
+
+    /// provide target, otherwise builds all targets
+    #[clap(long)]
+    pub target: Option<String>,
+
+    #[clap(long)]
+    pub link_args: bool,
 }
 
 impl ClapCargo {
@@ -127,8 +148,43 @@ impl ClapCargo {
     }
 
     /// Create a Command builder for cargo
-    pub fn cargo_cmd() -> Command {
-        Command::new(cargo())
+    pub fn cargo_cmd(&self) -> Command {
+        let mut cmd = Command::new(self.cargo_bin.bin());
+        if cmd.get_program().eq_ignore_ascii_case("cargo") {
+            cmd.arg(format!("+{}", self.channel()));
+        }
+        if self.link_args || self.optimize {
+            cmd.env("RUSTFLAGS", "-C link-args=-s");
+        }
+        cmd
+    }
+
+    pub fn channel(&self) -> &str {
+        if self.optimize {
+            "nightly"
+        } else {
+            &self.cargo_bin.channel
+        }
+    }
+
+    pub fn build_cmd(&self) -> Command {
+        let mut cmd = self.cargo_cmd();
+        cmd.arg("build");
+        if let Some(target) = self.target.as_ref() {
+            cmd.arg("--target");
+            cmd.arg(target);
+        } else {
+            cmd.arg("--all-targets");
+        }
+        self.add_cargo_args(&mut cmd);
+        if self.release {
+            cmd.arg("--release");
+        }
+        if self.optimize {
+            cmd.arg("-Z=build-std=std,panic_abort");
+            cmd.arg("-Z=build-std-features=panic_immediate_abort");
+        }
+        cmd
     }
 
     /// Find package given a name
@@ -137,19 +193,15 @@ impl ClapCargo {
         let package = self.packages()?.into_iter().find(|p| {
             let res = p.name == name;
             if !res && p.name.to_shouty_kebab_case() == name.to_shouty_kebab_case() {
-              found_close_pair = Some(&p.name);
+                found_close_pair = Some(&p.name);
             };
             res
         });
 
         if let (Some(similar_package), None) = (found_close_pair, package) {
-          bail!("Found similar package for {name} ~ {similar_package}");
+            bail!("Found similar package for {name} ~ {similar_package}");
         }
 
         Ok(package)
     }
-}
-
-fn cargo() -> String {
-    env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
 }
