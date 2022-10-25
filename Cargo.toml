@@ -18,3 +18,8 @@ cargo_metadata = "0.15.0"
 clap = { version = "3.0", default-features = false, features = ["std", "derive"] }
 clap-cargo = {version = "0.9.1", features = ['cargo_metadata']}
 heck = "0.4.0"
+
+
+[features]
+default = ["std"]
+std = []

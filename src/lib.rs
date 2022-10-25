@@ -1,4 +1,4 @@
-//! Simple Wrapper around clap cargo that adds some utilities to the
+//! Simple Wrapper around clap cargo that adds some utilities to access the metadata
 //!
 //! ```
 //! pub struct ArgStruct {
@@ -11,16 +11,29 @@ use anyhow::{bail, Result};
 use cargo_metadata::{camino::Utf8PathBuf, DependencyKind, Metadata, Package};
 use clap_cargo::{Features, Manifest, Workspace};
 use heck::ToShoutyKebabCase;
+use impls::Merge;
 use std::{
     env,
+    ffi::OsString,
     path::{Path, PathBuf},
     process::Command,
 };
 
 mod cargo_bin;
-pub use cargo_bin::*;
+mod cargo_build;
+#[cfg(feature = "std")]
+mod cmd;
+pub mod impls;
 
-/// Combination of all three clap cargo's arg structs
+pub use cargo_bin::*;
+pub use cargo_build::*;
+pub use impls::*;
+
+#[cfg(feature = "std")]
+pub use cmd::ToCmd;
+
+/// Combination of all three clap cargo's arg structs and two new ones,
+/// [`CargoBuild`] and [`CargoBin`].
 #[derive(Default, Clone, Debug, PartialEq, Eq, clap::Args)]
 #[non_exhaustive]
 pub struct ClapCargo {
@@ -36,20 +49,12 @@ pub struct ClapCargo {
     #[clap(flatten)]
     pub cargo_bin: CargoBin,
 
-    /// Compile release build (default is debug)
-    #[clap(long)]
-    pub release: bool,
+    #[clap(flatten)]
+    pub cargo_build: CargoBuild,
 
-    /// Add additional nightly features for optimizing
-    #[clap(long)]
-    pub optimize: bool,
-
-    /// provide target, otherwise builds all targets
-    #[clap(long)]
-    pub target: Option<String>,
-
-    #[clap(long)]
-    pub link_args: bool,
+    /// Extra arguments passed to cargo after `--`
+    #[clap(last = true, name = "CARGO_ARGS")]
+    pub slop: Vec<OsString>,
 }
 
 impl ClapCargo {
@@ -61,7 +66,6 @@ impl ClapCargo {
                 let mut metadata_cmd = self.manifest.metadata();
                 self.features.forward_metadata(&mut metadata_cmd);
                 METADATA = Some(metadata_cmd.exec()?);
-                // println!("{:#?}", METADATA)
             }
             Ok(METADATA.as_ref().unwrap())
         }
@@ -98,53 +102,23 @@ impl ClapCargo {
     }
 
     /// Add the correct CLI flags to a command
+    #[deprecated(note = "use add_args_to_cmd instead")]
     pub fn add_cargo_args(&self, cmd: &mut Command) {
-        if let Some(manifest_path) = &self.manifest.manifest_path {
-            cmd.arg("--manifest-path");
-            cmd.arg(manifest_path);
-        }
-        if self.features.no_default_features {
-            cmd.arg("--no-default-features");
-        }
-        if self.features.all_features {
-            cmd.arg("--all-features");
-        } else {
-            for feature in &self.features.features {
-                cmd.arg("--features");
-                cmd.arg(feature);
-            }
-        }
-        for pack in &self.workspace.exclude {
-            cmd.arg("--exclude");
-            cmd.arg(pack);
-        }
-        if self.workspace.workspace || self.workspace.all {
-            cmd.arg("--workspace");
-        } else if !self.workspace.package.is_empty() {
-            self.workspace.package.iter().for_each(|p| {
-                cmd.arg("-p");
-                cmd.arg(p);
-            })
-        }
+        self.add_args_to_cmd(cmd);
     }
 
     pub fn get_deps(&self, p: &Package) -> Result<Vec<Utf8PathBuf>> {
         let packages = &self.metadata()?.packages;
-        let res = p
-            .dependencies
+        p.dependencies
             .iter()
-            .filter_map(|dep| {
-                matches!(dep.kind, DependencyKind::Normal).then(|| {
-                    packages
-                        .iter()
-                        .find(|p| p.name == dep.name)
-                        .unwrap_or_else(|| panic!("could not find {}", dep.name))
-                        .manifest_path
-                        .clone()
-                })
+            .filter(|dep| matches!(dep.kind, DependencyKind::Normal))
+            .map(|dep| {
+                packages.iter().find(|p| p.name == dep.name).map_or_else(
+                    || bail!("could not find {}", dep.name),
+                    |p| Ok(p.manifest_path.clone()),
+                )
             })
-            .collect();
-        Ok(res)
+            .collect()
     }
 
     /// Create a Command builder for cargo
@@ -153,37 +127,24 @@ impl ClapCargo {
         if cmd.get_program().eq_ignore_ascii_case("cargo") {
             cmd.arg(format!("+{}", self.channel()));
         }
-        if self.link_args || self.optimize {
+        if self.cargo_build.link_args || self.cargo_build.optimize {
             cmd.env("RUSTFLAGS", "-C link-args=-s");
         }
         cmd
     }
 
     pub fn channel(&self) -> &str {
-        if self.optimize {
+        if self.cargo_build.optimize {
             "nightly"
         } else {
-            &self.cargo_bin.channel
+            self.cargo_bin.channel()
         }
     }
 
+    #[cfg(feature = "std")]
     pub fn build_cmd(&self) -> Command {
         let mut cmd = self.cargo_cmd();
-        cmd.arg("build");
-        if let Some(target) = self.target.as_ref() {
-            cmd.arg("--target");
-            cmd.arg(target);
-        } else {
-            cmd.arg("--all-targets");
-        }
-        self.add_cargo_args(&mut cmd);
-        if self.release {
-            cmd.arg("--release");
-        }
-        if self.optimize {
-            cmd.arg("-Z=build-std=std,panic_abort");
-            cmd.arg("-Z=build-std-features=panic_immediate_abort");
-        }
+        self.add_args_to_cmd(cmd.arg("build"));
         cmd
     }
 
@@ -203,5 +164,36 @@ impl ClapCargo {
         }
 
         Ok(package)
+    }
+}
+
+impl Merge for ClapCargo {
+    fn merge(&mut self, other: Self) {
+        let Self {
+            features,
+            manifest,
+            workspace,
+            cargo_bin,
+            cargo_build: build,
+            mut slop,
+        } = other;
+        self.features.merge(features);
+        self.manifest.merge(manifest);
+        self.workspace.merge(workspace);
+        self.cargo_bin.merge(cargo_bin);
+        self.cargo_build.merge(build);
+        self.slop.append(&mut slop);
+    }
+}
+
+impl Args for ClapCargo {
+    fn to_args(&self) -> Vec<OsString> {
+        let mut args = self.workspace.to_args();
+        args.extend(self.features.to_args());
+        // Can skip non-cargo args
+        // args.extend(self.cargo_bin.to_args());
+        args.extend(self.cargo_build.to_args());
+        args.extend(self.manifest.to_args());
+        args
     }
 }
