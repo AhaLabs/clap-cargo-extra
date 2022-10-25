@@ -10,7 +10,7 @@ pub struct CargoBin {
     /// stable, beta, nightly, and custom
     /// default: stable
     #[clap(long)]
-    channel: Option<String>,
+    pub channel: Option<String>,
 }
 
 impl CargoBin {
