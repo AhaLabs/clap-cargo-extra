@@ -1,6 +1,9 @@
 //! Simple Wrapper around clap cargo that adds some utilities to access the metadata
 //!
-//! ```
+//! ```ignore
+//! # use clap::Parser;
+//! # use crate::ClapCargo;
+//! 
 //! pub struct ArgStruct {
 //!   #[clap(flatten)]
 //!   pub cargo: ClapCargo,
