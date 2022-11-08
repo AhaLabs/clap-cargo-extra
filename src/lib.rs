@@ -3,7 +3,7 @@
 //! ```ignore
 //! # use clap::Parser;
 //! # use crate::ClapCargo;
-//! 
+//!
 //! pub struct ArgStruct {
 //!   #[clap(flatten)]
 //!   pub cargo: ClapCargo,

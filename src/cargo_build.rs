@@ -39,7 +39,11 @@ impl CargoBuild {
     }
 
     fn release_or_debug(&self) -> &str {
-        if self.release { "release" } else { "debug" }
+        if self.release {
+            "release"
+        } else {
+            "debug"
+        }
     }
 }
 
