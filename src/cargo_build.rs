@@ -31,6 +31,22 @@ pub struct CargoBuild {
     pub profile: Option<String>,
 }
 
+impl CargoBuild {
+    pub fn profile(&self) -> &str {
+        self.profile
+            .as_deref()
+            .unwrap_or_else(|| self.release_or_debug())
+    }
+
+    fn release_or_debug(&self) -> &str {
+        if self.release {
+            "release"
+        } else {
+            "debug"
+        }
+    }
+}
+
 impl Merge for CargoBuild {
     fn merge(&mut self, other: CargoBuild) {
         let CargoBuild {

@@ -95,12 +95,3 @@ impl Merge for Workspace {
         self.exclude.append(&mut exclude);
     }
 }
-
-// impl IntoIterator for Workspace {
-//     type Item = String;
-//     type IntoIter = std::vec::IntoIter<Self::Item>;
-
-//     fn into_iter(self) -> Self::IntoIter {
-//         self.to_args().into_iter()
-//     }
-// }
