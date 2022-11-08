@@ -26,14 +26,14 @@ const WASM32_UNKNOWN_UNKNOWN: &str = "wasm32-unknown-unknown";
 
 #[test]
 fn build_release() -> Result<(), Box<dyn std::error::Error>> {
-    let args = try_parse_from(&["", "--release"])?;
-    assert_eq!(args.cargo_build.release, true);
+    let args = try_parse_from(["", "--release"])?;
+    assert!(args.cargo_build.release);
     Ok(())
 }
 
 #[test]
 fn build_profile() -> Result<(), Box<dyn std::error::Error>> {
-    let args = try_parse_from(&["", "--profile", "custom"])?;
+    let args = try_parse_from(["", "--profile", "custom"])?;
     let custom = custom();
     assert_eq!(args.cargo_build.profile, custom);
     let mut build = CargoBuild::default();
@@ -44,9 +44,9 @@ fn build_profile() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn build_profile_and_release() -> Result<(), Box<dyn std::error::Error>> {
-    let args = try_parse_from(&["", "--profile", "custom", "--release"])?;
+    let args = try_parse_from(["", "--profile", "custom", "--release"])?;
     let custom = custom();
-    assert_eq!(args.cargo_build.release, true);
+    assert!(args.cargo_build.release);
     assert_eq!(args.cargo_build.profile, custom);
     let mut build = CargoBuild::default();
     build.profile = custom;
@@ -57,11 +57,11 @@ fn build_profile_and_release() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn build_profile_and_release_merge() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args = try_parse_from(&["", "--profile", "custom"])?;
-    let args2 = try_parse_from(&["", "--release"])?;
+    let mut args = try_parse_from(["", "--profile", "custom"])?;
+    let args2 = try_parse_from(["", "--release"])?;
     args.merge(args2);
     let custom = custom();
-    assert_eq!(args.cargo_build.release, true);
+    assert!(args.cargo_build.release);
     assert_eq!(args.cargo_build.profile, custom);
     let mut build = CargoBuild::default();
     build.profile = custom;
@@ -72,7 +72,7 @@ fn build_profile_and_release_merge() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn build_target() -> Result<(), Box<dyn std::error::Error>> {
-    let args = try_parse_from(&["", "--target", WASM32_UNKNOWN_UNKNOWN])?;
+    let args = try_parse_from(["", "--target", WASM32_UNKNOWN_UNKNOWN])?;
     let target = Some(WASM32_UNKNOWN_UNKNOWN.to_string());
     assert_eq!(args.cargo_build.target, target);
     let mut build = CargoBuild::default();
