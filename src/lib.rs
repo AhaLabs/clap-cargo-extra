@@ -128,7 +128,6 @@ impl ClapCargo {
             DependencyKind::Development => "dev",
             DependencyKind::Build => "build",
             _ => "all",
-
         };
 
         let stdout = Command::new("cargo")
