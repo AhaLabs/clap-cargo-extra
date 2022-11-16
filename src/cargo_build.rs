@@ -12,7 +12,7 @@ pub struct CargoBuild {
     pub optimize: bool,
 
     /// Build for the target triple
-    #[clap(long, name = "TRIPE")]
+    #[clap(long, name = "TRIPLE")]
     pub target: Option<String>,
 
     /// Build all targets

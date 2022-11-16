@@ -149,9 +149,7 @@ impl ClapCargo {
                 let s: Vec<&str> = line.split(' ').collect();
                 let package_id = format!("{}{}", s[0], s[1]);
                 let res = packages.get(&package_id).copied();
-                if res.is_none() {
-                    println!("package {}", package_id);
-                } else if let Some(r) = &res {
+                if let Some(r) = &res {
                     if r == &p {
                         return None;
                     }

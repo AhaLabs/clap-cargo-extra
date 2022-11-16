@@ -24,7 +24,7 @@ impl Args for Features {
         }
         if !self.features.is_empty() {
             args.push("--features".into());
-            args.push(self.features.join(" ").into())
+            args.push(self.features.join(" ").into());
         }
         args
     }
