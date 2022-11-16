@@ -1,5 +1,6 @@
 use std::ffi::OsString;
 
+use cargo_metadata::Target;
 use clap_cargo::{Features, Manifest, Workspace};
 
 /// Trait for generating args. [`OsString`] is used since some args may be paths.
@@ -93,5 +94,25 @@ impl Merge for Workspace {
         self.workspace = self.workspace || workspace;
         self.all = self.all || all;
         self.exclude.append(&mut exclude);
+    }
+}
+
+pub trait TargetTools {
+    /// Returns the name of the wasm binary
+    /// `-` -> `_` and add `.wasm` to the end
+    fn wasm_bin_name(&self) -> String;
+
+    /// Returns the name of the binary with no extension
+    /// `-` -> `_`
+    fn bin_name(&self) -> String;
+}
+
+impl TargetTools for Target {
+    fn wasm_bin_name(&self) -> String {
+        format!("{}.wasm", self.bin_name())
+    }
+
+    fn bin_name(&self) -> String {
+        self.name.replace('-', "_")
     }
 }
