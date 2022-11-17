@@ -10,12 +10,13 @@
 //! }
 //! ```
 
-use anyhow::{bail, Result};
-use cargo_metadata::{camino::Utf8PathBuf, DependencyKind, Metadata, Package};
+use anyhow::{bail, Context, Result};
+use cargo_metadata::{DependencyKind, Metadata, Package, Target};
 use clap_cargo::{Features, Manifest, Workspace};
 use heck::ToShoutyKebabCase;
 use impls::Merge;
 use std::{
+    collections::HashMap,
     env,
     ffi::OsString,
     path::{Path, PathBuf},
@@ -70,7 +71,9 @@ impl ClapCargo {
                 self.features.forward_metadata(&mut metadata_cmd);
                 METADATA = Some(metadata_cmd.exec()?);
             }
-            Ok(METADATA.as_ref().unwrap())
+            METADATA
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("failed to read metadata"))
         }
     }
 
@@ -105,23 +108,58 @@ impl ClapCargo {
     }
 
     /// Add the correct CLI flags to a command
-    #[deprecated(note = "use add_args_to_cmd instead")]
+    #[deprecated(note = "use add_args instead")]
     pub fn add_cargo_args(&self, cmd: &mut Command) {
-        self.add_args_to_cmd(cmd);
+        self.add_args(cmd);
     }
 
-    pub fn get_deps(&self, p: &Package) -> Result<Vec<Utf8PathBuf>> {
-        let packages = &self.metadata()?.packages;
-        p.dependencies
+    /// Returns all packages that package `p` depends on transitively.
+    /// `dep_kind` = Normal, Development, Build, and Unknown
+    /// Unknown is equivalent to `all`
+    pub fn get_deps(&self, p: &Package, dep_kind: DependencyKind) -> Result<Vec<&Package>> {
+        // Todo move this up stream
+        let packages = self
+            .metadata()?
+            .packages
             .iter()
-            .filter(|dep| matches!(dep.kind, DependencyKind::Normal))
-            .map(|dep| {
-                packages.iter().find(|p| p.name == dep.name).map_or_else(
-                    || bail!("could not find {}", dep.name),
-                    |p| Ok(p.manifest_path.clone()),
-                )
+            .map(|p| (format!("{}v{}", p.name, p.version), p))
+            .collect::<HashMap<String, &Package>>();
+
+        let edges = match dep_kind {
+            DependencyKind::Normal => "normal",
+            DependencyKind::Development => "dev",
+            DependencyKind::Build => "build",
+            _ => "all",
+        };
+
+        let stdout = Command::new("cargo")
+            .args([
+                "tree",
+                "--prefix",
+                "none",
+                "--edges",
+                edges,
+                "--manifest-path",
+                p.manifest_path.as_str(),
+            ])
+            .output()
+            .with_context(|| format!("failed to run cargo tree on {}", p.name))?
+            .stdout;
+        let res = String::from_utf8(stdout)?
+            .lines()
+            .filter_map(|line| {
+                let s: Vec<&str> = line.split(' ').collect();
+                let package_id = format!("{}{}", s[0], s[1]);
+                let res = packages.get(&package_id).copied();
+                if let Some(r) = &res {
+                    if r == &p {
+                        return None;
+                    }
+                }
+                res
             })
-            .collect()
+            .collect::<Vec<_>>();
+        Ok(res)
     }
 
     /// Create a Command builder for cargo
@@ -147,7 +185,7 @@ impl ClapCargo {
     #[cfg(feature = "std")]
     pub fn build_cmd(&self) -> Command {
         let mut cmd = self.cargo_cmd();
-        self.add_args_to_cmd(cmd.arg("build"));
+        self.add_args(cmd.arg("build"));
         cmd
     }
 
@@ -167,6 +205,15 @@ impl ClapCargo {
         }
 
         Ok(package)
+    }
+
+    pub fn built_bin(&self, target: &Target) -> Result<PathBuf> {
+        self.target_dir().map(|target_dir| {
+            target_dir
+                .join("wasm32-unknown-unknown")
+                .join(self.cargo_build.profile())
+                .join(target.wasm_bin_name())
+        })
     }
 }
 
