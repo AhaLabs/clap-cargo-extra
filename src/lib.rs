@@ -71,7 +71,9 @@ impl ClapCargo {
                 self.features.forward_metadata(&mut metadata_cmd);
                 METADATA = Some(metadata_cmd.exec()?);
             }
-            Ok(METADATA.as_ref().unwrap())
+            METADATA
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("failed to read metadata"))
         }
     }
 
@@ -106,13 +108,13 @@ impl ClapCargo {
     }
 
     /// Add the correct CLI flags to a command
-    #[deprecated(note = "use add_args_to_cmd instead")]
+    #[deprecated(note = "use add_args instead")]
     pub fn add_cargo_args(&self, cmd: &mut Command) {
-        self.add_args_to_cmd(cmd);
+        self.add_args(cmd);
     }
 
     /// Returns all packages that package `p` depends on transitively.
-    /// dep_kind = Normal, Development, Build, and Unknown
+    /// `dep_kind` = Normal, Development, Build, and Unknown
     /// Unknown is equivalent to `all`
     pub fn get_deps(&self, p: &Package, dep_kind: DependencyKind) -> Result<Vec<&Package>> {
         // Todo move this up stream
@@ -183,7 +185,7 @@ impl ClapCargo {
     #[cfg(feature = "std")]
     pub fn build_cmd(&self) -> Command {
         let mut cmd = self.cargo_cmd();
-        self.add_args_to_cmd(cmd.arg("build"));
+        self.add_args(cmd.arg("build"));
         cmd
     }
 
