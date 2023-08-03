@@ -6,7 +6,7 @@ keywords = ["clap", "cargo", "cli"]
 license = "MIT"
 name = "clap-cargo-extra"
 repository = "https://github.com/ahalabs/clap-cargo-extra"
-version = "0.2.0"
+version = "0.3.0"
 
 
 
