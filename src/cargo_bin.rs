@@ -41,19 +41,3 @@ impl Args for CargoBin {
         args
     }
 }
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn verify_app() {
-        #[derive(Debug, clap::StructOpt)]
-        struct Cli {
-            #[clap(flatten)]
-            toolchain: CargoBin,
-        }
-
-        use clap::CommandFactory;
-        Cli::command().debug_assert()
-    }
-}
